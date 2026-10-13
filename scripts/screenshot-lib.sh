@@ -5,6 +5,14 @@ PKG="${PKG:-$(grep -oE 'applicationId = "[^"]+"' sample/build.gradle.kts | cut -
 OUT="docs/screenshots"
 mkdir -p "$OUT"
 
+# Full Wi-Fi and no mobile signal in the demo status bar. Sent as separate commands, and again after a rotation,
+# because the tablet's System UI rebuilds its status bar and dropped the Wi-Fi icon otherwise.
+demo_network() {
+  adb shell am broadcast -a com.android.systemui.demo -e command network -e mobile hide > /dev/null
+  adb shell am broadcast -a com.android.systemui.demo -e command network -e fully true > /dev/null
+  adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4 > /dev/null
+}
+
 install_sample() {
   adb install -r sample/build/outputs/apk/debug/sample-debug.apk
   # A freshly booted emulator often shows "Pixel Launcher isn't responding".
@@ -18,7 +26,7 @@ install_sample() {
   adb shell am broadcast -a com.android.systemui.demo -e command enter
   adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941
   adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false
-  adb shell am broadcast -a com.android.systemui.demo -e command network -e fully true -e wifi show -e level 4 -e mobile hide
+  demo_network
   adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false
 }
 
@@ -174,6 +182,8 @@ ensure_landscape() {
     h="${size#*x}"
     if [ "$w" -gt "$h" ]; then
       echo "Display is landscape ($size, rotation $rotation)"
+      demo_network
+      sleep 1
       return 0
     fi
   done
