@@ -1,0 +1,56 @@
+name: JitPack
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Tag to build on JitPack
+        required: true
+        default: 1.0.0
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+jobs:
+  jitpack:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Resolve version
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+            version=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build on JitPack
+        run: |
+          repo="${{ github.repository }}"
+          version="${{ steps.v.outputs.version }}"
+          base="https://jitpack.io/com/github/$repo/$version"
+          api="https://jitpack.io/api/builds/com.github.${repo%%/*}/${repo##*/}/$version"
+          # Asking for the build log queues the build when JitPack has not built this tag yet.
+          curl -s -o /dev/null --max-time 120 "$base/build.log" || true
+          for attempt in $(seq 1 40); do
+            status=$(curl -s --max-time 60 "$api" | jq -r '.status // empty' 2>/dev/null || true)
+            echo "Attempt $attempt: ${status:-queued}"
+            case "$status" in
+              ok)
+                curl -s --max-time 60 "$base/build.log" | tail -n 40
+                echo "JitPack build succeeded: https://jitpack.io/#$repo/$version"
+                exit 0 ;;
+              Error|error|failed)
+                curl -s --max-time 60 "$base/build.log" | tail -n 200
+                echo "::error::JitPack build failed for $repo $version"
+                exit 1 ;;
+            esac
+            sleep 45
+          done
+          curl -s --max-time 60 "$base/build.log" | tail -n 100
+          echo "::error::Timed out waiting for JitPack"
+          exit 1
