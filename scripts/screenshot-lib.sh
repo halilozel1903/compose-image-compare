@@ -9,8 +9,8 @@ mkdir -p "$OUT"
 # because the tablet's System UI rebuilds its status bar and dropped the Wi-Fi icon otherwise.
 demo_network() {
   adb shell am broadcast -a com.android.systemui.demo -e command network -e mobile hide > /dev/null
-  adb shell am broadcast -a com.android.systemui.demo -e command network -e fully true > /dev/null
-  adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4 > /dev/null
+  # "fully" must come with the Wi-Fi command, or the icon shows the no-internet mark.
+  adb shell am broadcast -a com.android.systemui.demo -e command network -e fully true -e wifi show -e level 4 > /dev/null
 }
 
 install_sample() {
